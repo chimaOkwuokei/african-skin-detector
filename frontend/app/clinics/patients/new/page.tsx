@@ -1,21 +1,15 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent } from "react";
+import { useRouter } from "next/navigation";
 
 export default function NewPatientPage() {
-  // This message is only for frontend demonstration.
-  // It will later be replaced with navigation to the next workflow step.
-  const [formMessage, setFormMessage] = useState("");
+  const router = useRouter();
 
-  // Handles the first version of the patient form.
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    // We are not sending data to a backend yet.
-    // For now, we show a confirmation message in the interface.
-    setFormMessage(
-      "Patient information captured. The next step will collect clinical details.",
-    );
+    router.push("/clinics/patients/new/clinical");
   }
 
   return (
@@ -157,9 +151,7 @@ export default function NewPatientPage() {
                 <option value="female">Female</option>
                 <option value="male">Male</option>
                 <option value="intersex">Intersex</option>
-                <option value="prefer-not-to-say">
-                  Prefer not to say
-                </option>
+                <option value="prefer-not-to-say">Prefer not to say</option>
               </select>
             </div>
 
@@ -209,8 +201,8 @@ export default function NewPatientPage() {
             </h3>
 
             <p className="mt-1 text-sm text-slate-500">
-              Confirm that the patient understands how their information will
-              be used for clinical review.
+              Confirm that the patient understands how their information will be
+              used for clinical review.
             </p>
           </div>
 
@@ -241,23 +233,11 @@ export default function NewPatientPage() {
               <span className="text-sm leading-6 text-slate-600">
                 The patient agrees that de-identified information may be used
                 for research or future model improvement.
-                <span className="ml-1 text-slate-400">
-                  Optional
-                </span>
+                <span className="ml-1 text-slate-400">Optional</span>
               </span>
             </label>
           </div>
         </section>
-
-        {/* Frontend-only feedback message */}
-        {formMessage && (
-          <div
-            role="status"
-            className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
-          >
-            {formMessage}
-          </div>
-        )}
 
         {/* Form actions */}
         <div className="flex flex-col-reverse justify-end gap-3 sm:flex-row">
