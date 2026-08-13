@@ -1,32 +1,28 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import type { FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 export default function NewPatientPage() {
-  // This message is only for frontend demonstration.
-  // It will later be replaced with navigation to the next workflow step.
-  const [formMessage, setFormMessage] = useState("");
+  const router = useRouter();
 
-  // Handles the first version of the patient form.
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    // We are not sending data to a backend yet.
-    // For now, we show a confirmation message in the interface.
-    setFormMessage(
-      "Patient information captured. The next step will collect clinical details.",
-    );
+    // Navigation will occur after all required fields pass validation.
+    router.push("/clinics/patients/new/clinical");
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
-      {/* Page heading and explanation */}
+    <main className="mx-auto max-w-5xl space-y-8">
+      {/* Page heading */}
       <section>
         <p className="text-sm font-medium text-sky-600">Patient intake</p>
 
-        <h2 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">
+        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-950">
           Add a new patient
-        </h2>
+        </h1>
 
         <p className="mt-2 max-w-2xl text-slate-500">
           Start by recording the patient&apos;s basic information. You will add
@@ -37,21 +33,18 @@ export default function NewPatientPage() {
       {/* Workflow progress indicator */}
       <section className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-3">
-          {/* Active step */}
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-500 text-sm font-semibold text-white">
             1
           </div>
 
           <div className="h-px flex-1 bg-sky-200" />
 
-          {/* Upcoming step */}
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-50 text-sm font-semibold text-sky-600 ring-1 ring-sky-200">
             2
           </div>
 
           <div className="h-px flex-1 bg-sky-200" />
 
-          {/* Upcoming step */}
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-50 text-sm font-semibold text-sky-600 ring-1 ring-sky-200">
             3
           </div>
@@ -64,13 +57,14 @@ export default function NewPatientPage() {
         </div>
       </section>
 
-      {/* Patient biodata form */}
+      {/* Patient form */}
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Patient biodata */}
         <section className="rounded-2xl border border-sky-100 bg-white p-6 shadow-sm">
           <div className="mb-6">
-            <h3 className="text-lg font-semibold text-slate-950">
+            <h2 className="text-lg font-semibold text-slate-950">
               Patient biodata
-            </h3>
+            </h2>
 
             <p className="mt-1 text-sm text-slate-500">
               Enter the information required to identify and follow up with the
@@ -79,7 +73,7 @@ export default function NewPatientPage() {
           </div>
 
           <div className="grid gap-5 md:grid-cols-2">
-            {/* Medical record number */}
+            {/* Patient ID */}
             <div>
               <label
                 htmlFor="patientId"
@@ -147,8 +141,8 @@ export default function NewPatientPage() {
               <select
                 id="sex"
                 name="sex"
-                required
                 defaultValue=""
+                required
                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
               >
                 <option value="" disabled>
@@ -157,9 +151,7 @@ export default function NewPatientPage() {
                 <option value="female">Female</option>
                 <option value="male">Male</option>
                 <option value="intersex">Intersex</option>
-                <option value="prefer-not-to-say">
-                  Prefer not to say
-                </option>
+                <option value="prefer-not-to-say">Prefer not to say</option>
               </select>
             </div>
 
@@ -181,7 +173,7 @@ export default function NewPatientPage() {
               />
             </div>
 
-            {/* Community or location */}
+            {/* Location */}
             <div>
               <label
                 htmlFor="location"
@@ -204,18 +196,18 @@ export default function NewPatientPage() {
         {/* Consent section */}
         <section className="rounded-2xl border border-sky-100 bg-white p-6 shadow-sm">
           <div className="mb-5">
-            <h3 className="text-lg font-semibold text-slate-950">
+            <h2 className="text-lg font-semibold text-slate-950">
               Teledermatology consent
-            </h3>
+            </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Confirm that the patient understands how their information will
-              be used for clinical review.
+              Confirm that the patient understands how their information will be
+              used for clinical review.
             </p>
           </div>
 
           <div className="space-y-4">
-            {/* Consent for care */}
+            {/* Required clinical consent */}
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
@@ -241,32 +233,20 @@ export default function NewPatientPage() {
               <span className="text-sm leading-6 text-slate-600">
                 The patient agrees that de-identified information may be used
                 for research or future model improvement.
-                <span className="ml-1 text-slate-400">
-                  Optional
-                </span>
+                <span className="ml-1 text-slate-400">Optional</span>
               </span>
             </label>
           </div>
         </section>
 
-        {/* Frontend-only feedback message */}
-        {formMessage && (
-          <div
-            role="status"
-            className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
-          >
-            {formMessage}
-          </div>
-        )}
-
         {/* Form actions */}
         <div className="flex flex-col-reverse justify-end gap-3 sm:flex-row">
-          <a
+          <Link
             href="/clinics/dashboard"
             className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
           >
             Cancel
-          </a>
+          </Link>
 
           <button
             type="submit"
@@ -276,6 +256,6 @@ export default function NewPatientPage() {
           </button>
         </div>
       </form>
-    </div>
+    </main>
   );
 }
