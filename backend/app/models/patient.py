@@ -14,8 +14,11 @@ class Patient(SQLModel, table=True):
     name: str
     age: int | None = None
     sex: str | None = None
-    external_ref: str | None = None
-    history_notes: str | None = None
+    address: str | None = None
+    phone_number: str | None = None
+    image: str | None = None
+    share_consent: str | None = None
+    research_consent: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
 
     cases: list["Case"] = Relationship(back_populates="patient")
