@@ -1,6 +1,9 @@
 # Backend
 backend/.venv/
-backend/__pycache__/
+backend/uploads/
+backend/*.db
+**/__pycache__/
+*.pyc
 
 # Frontend
 frontend/node_modules/
