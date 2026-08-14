@@ -8,3 +8,15 @@ dependencies = [
     "fastapi[standard]>=0.141.1",
     "sqlmodel>=0.0.39",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+markers = ["live: hits real external services"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
