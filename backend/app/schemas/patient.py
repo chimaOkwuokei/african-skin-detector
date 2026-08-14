@@ -7,7 +7,6 @@ class PatientCreate(SQLModel):
     sex: str | None = None
     address: str | None = None
     phone_number: str | None = None
-    image: str | None = None
     share_consent: str | None = None
     research_consent: str | None = None
 
@@ -19,7 +18,6 @@ class PatientRead(SQLModel):
     sex: str | None
     address: str | None = None
     phone_number: str | None = None
-    image: str | None = None
     share_consent: str | None = None
     research_consent: str | None = None
 

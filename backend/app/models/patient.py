@@ -16,7 +16,6 @@ class Patient(SQLModel, table=True):
     sex: str | None = None
     address: str | None = None
     phone_number: str | None = None
-    image: str | None = None
     share_consent: str | None = None
     research_consent: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
