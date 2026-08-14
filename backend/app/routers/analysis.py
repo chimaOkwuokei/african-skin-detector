@@ -8,7 +8,11 @@ from app.integrations.analysis_model import MedGemmaError, MedGemmaWarmingUp
 from app.models import Analysis, Case, LesionImage
 from app.schemas.analysis import AIAnalysisRead
 from app.services.analysis_service import run_analysis
-from app.services.triage_service import compute_urgency_tier
+from app.services.triage_service import (
+    compute_urgency_tier,
+    urgency_score,
+    red_flags,
+)
 
 router = APIRouter(prefix="/cases/{case_id}/analyses", tags=["analysis"])
 
@@ -21,17 +25,59 @@ def _get_case_or_404(case_id: int, session: Session) -> Case:
 
 
 def _build_patient_context(case: Case) -> str:
+    """
+    Builds the clinical summary sent to MedGemma.
+
+    Name, phone and location are deliberately left out: they identify the
+    patient and add nothing clinically, and this goes to a third-party
+    endpoint.
+    """
     patient = case.patient
-    parts = []
+    lines = []
+
+    who = []
     if patient is not None:
         if patient.age is not None:
-            parts.append(f"{patient.age}yo")
+            who.append(f"{patient.age}yo")
         if patient.sex:
-            parts.append(patient.sex)
-    context = " ".join(parts)
+            who.append(patient.sex)
+    if who:
+        lines.append(f"Patient: {' '.join(who)}")
+
     if case.complaint:
-        context = f"{context}, {case.complaint}" if context else case.complaint
-    return context or "No additional patient context provided."
+        lines.append(f"Complaint: {case.complaint}")
+
+    if case.duration_value and case.duration_unit:
+        lines.append(f"Duration: {case.duration_value} {case.duration_unit}")
+
+    if case.onset:
+        lines.append(f"Onset: {case.onset}")
+
+    if case.symptoms:
+        lines.append(f"Symptoms: {case.symptoms.replace(',', ', ')}")
+
+    if case.body_area:
+        lines.append(f"Body area: {case.body_area}")
+
+    if case.affected_area_extent:
+        lines.append(f"Extent: {case.affected_area_extent}")
+
+    history = case.medical_history or (
+        patient.history_notes if patient is not None else None
+    )
+    if history:
+        lines.append(f"Medical history: {history}")
+
+    if case.medication:
+        lines.append(f"Current medication: {case.medication}")
+
+    if case.allergies:
+        lines.append(f"Allergies: {case.allergies}")
+
+    if case.clinician_notes:
+        lines.append(f"Clinician notes: {case.clinician_notes}")
+
+    return "\n".join(lines) or "No patient context provided."
 
 
 @router.post("", response_model=AIAnalysisRead)
@@ -58,8 +104,13 @@ async def analyze_case(case_id: int, session: Session = Depends(get_session)):
     except MedGemmaError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
+    flags = red_flags(case)
     analysis = Analysis(
-        case_id=case.id, urgency_tier=compute_urgency_tier(case), **result
+        case_id=case.id,
+        urgency_tier=compute_urgency_tier(case),
+        urgency_score=urgency_score(case),
+        red_flags=",".join(flags) or None,
+        **result,
     )
     session.add(analysis)
     case.status = "completed"

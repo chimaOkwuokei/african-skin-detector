@@ -5,6 +5,8 @@ class AIAnalysisRead(SQLModel):
     id: int
     diagnosis_text: str
     urgency_tier: str
+    urgency_score: int
+    red_flags: str | None
     model_version: str
 
 

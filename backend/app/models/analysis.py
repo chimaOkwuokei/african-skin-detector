@@ -27,6 +27,9 @@ class Analysis(SQLModel, table=True):
     diagnosis_text: str  # MedGemma's predicted diagnosis
     # "tier_1" (most urgent) | "tier_2" | "tier_3" | "unassigned"
     urgency_tier: str = "unassigned"
+    # 0-100 display number, banded to always agree with urgency_tier.
+    urgency_score: int = 0
+    red_flags: str | None = None  # comma-separated, for display
     raw_output: str | None = None
 
     created_at: datetime = Field(default_factory=utcnow)
