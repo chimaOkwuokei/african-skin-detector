@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlmodel import SQLModel
 
 
@@ -32,8 +34,14 @@ class CaseRead(SQLModel):
     allergies: str | None
     clinician_notes: str | None
     status: str
+    created_at: datetime
     assignment_status: str | None
     specialist_name: str | None
+    patient_name: str | None
+    patient_ref: str | None
+    urgency_tier: str | None
+    urgency_score: int | None
+    diagnosis_text: str | None
 
 
 class AssignmentRead(SQLModel):

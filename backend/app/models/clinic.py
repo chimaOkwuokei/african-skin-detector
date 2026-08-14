@@ -7,7 +7,7 @@ from app.models._utils import utcnow
 
 if TYPE_CHECKING:
     from app.models.analysis import Analysis, LesionImage
-    from app.models.feedback import SpecialistFeedback
+    from app.models.feedback import CaseNote, SpecialistFeedback
     from app.models.patient import Patient
     from app.models.specialist import User
 
@@ -40,6 +40,7 @@ class Case(SQLModel, table=True):
     images: list["LesionImage"] = Relationship(back_populates="case")
     analyses: list["Analysis"] = Relationship(back_populates="case")
     assignment: Optional["Assignment"] = Relationship(back_populates="case")
+    notes: list["CaseNote"] = Relationship(back_populates="case")
 
     @property
     def assignment_status(self) -> str | None:
@@ -50,6 +51,34 @@ class Case(SQLModel, table=True):
         if self.assignment and self.assignment.specialist:
             return self.assignment.specialist.name
         return None
+
+    @property
+    def patient_name(self) -> str | None:
+        return self.patient.name if self.patient else None
+
+    @property
+    def patient_ref(self) -> str | None:
+        """The clinic's own record number, e.g. PT-0248."""
+        return self.patient.external_ref if self.patient else None
+
+    @property
+    def latest_analysis(self) -> Optional["Analysis"]:
+        return self.analyses[-1] if self.analyses else None
+
+    @property
+    def urgency_tier(self) -> str | None:
+        analysis = self.latest_analysis
+        return analysis.urgency_tier if analysis else None
+
+    @property
+    def urgency_score(self) -> int | None:
+        analysis = self.latest_analysis
+        return analysis.urgency_score if analysis else None
+
+    @property
+    def diagnosis_text(self) -> str | None:
+        analysis = self.latest_analysis
+        return analysis.diagnosis_text if analysis else None
 
 
 class Assignment(SQLModel, table=True):
