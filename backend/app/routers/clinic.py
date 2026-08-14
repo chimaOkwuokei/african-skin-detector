@@ -6,9 +6,10 @@ from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.database import get_session
-from app.models import Assignment, Case, LesionImage, Patient
+from app.models import Case, CaseNote, LesionImage, Patient
 from app.schemas.analysis import LesionImageRead
 from app.schemas.clinic import AssignmentRead, CaseCreate, CaseRead
+from app.schemas.feedback import CaseNoteCreate, CaseNoteRead
 from app.services.matcher_service import (
     NoAvailableSpecialistError,
     SpecialistNotFoundError,
@@ -70,6 +71,32 @@ async def upload_lesion_image(
     session.commit()
     session.refresh(image)
     return image
+
+
+@router.get("/{case_id}/images", response_model=list[LesionImageRead])
+def list_lesion_images(case_id: int, session: Session = Depends(get_session)):
+    _get_case_or_404(case_id, session)
+    return session.exec(
+        select(LesionImage).where(LesionImage.case_id == case_id)
+    ).all()
+
+
+@router.post("/{case_id}/notes", response_model=CaseNoteRead)
+def add_case_note(
+    case_id: int, data: CaseNoteCreate, session: Session = Depends(get_session)
+):
+    _get_case_or_404(case_id, session)
+    note = CaseNote(case_id=case_id, **data.model_dump())
+    session.add(note)
+    session.commit()
+    session.refresh(note)
+    return note
+
+
+@router.get("/{case_id}/notes", response_model=list[CaseNoteRead])
+def list_case_notes(case_id: int, session: Session = Depends(get_session)):
+    _get_case_or_404(case_id, session)
+    return session.exec(select(CaseNote).where(CaseNote.case_id == case_id)).all()
 
 
 @router.post("/{case_id}/assign", response_model=AssignmentRead)
