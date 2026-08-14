@@ -24,6 +24,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/", tags=["health"])
+def root():
+    """Confirms the API is up. Also for health check."""
+    return {
+        "service": "IleraDerma API",
+        "status": "ok",
+        "docs": "/docs",
+    }
+
+
 app.include_router(patient.router)
 app.include_router(clinic.router)
 app.include_router(analysis.router)
