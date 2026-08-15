@@ -9,3 +9,7 @@ frontend/dist/
 # Env files
 .env
 *.env
+# Local Python and database files
+__pycache__/
+*.py[cod]
+*.db
