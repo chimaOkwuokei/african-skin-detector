@@ -1,7 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+
+// --- API TYPES ---
+interface Case {
+  id: number;
+  patient_id: number;
+  patient_name: string;
+  patient_ref: string;
+  complaint: string;
+  status: string;
+  urgency_tier: string;
+  created_at: string;
+}
+
+interface Feedback {
+  id: number;
+  case_id: number;
+  patient_name: string;
+  specialist_name: string;
+  notes: string;
+  recommended_action: string;
+  created_at: string;
+}
 
 // The possible filters for the referral queue.
 type ReferralFilter =
@@ -10,114 +32,147 @@ type ReferralFilter =
   | "Awaiting review"
   | "Feedback received";
 
-// Temporary referral data.
-// This will later come from the backend.
-const referrals = [
-  {
-    id: "CASE-1024",
-    patient: "Amina Ibrahim",
-    patientId: "PT-0248",
-    concern: "Persistent facial lesion",
-    severity: "High",
-    status: "Awaiting dermatologist",
-    date: "10 Aug 2026",
-    dermatologist: "Not assigned",
-  },
-  {
-    id: "CASE-1023",
-    patient: "Michael Okafor",
-    patientId: "PT-0247",
-    concern: "Itchy skin rash",
-    severity: "Moderate",
-    status: "AI review complete",
-    date: "10 Aug 2026",
-    dermatologist: "Not assigned",
-  },
-  {
-    id: "CASE-1022",
-    patient: "Grace Nwosu",
-    patientId: "PT-0246",
-    concern: "Recurring skin irritation",
-    severity: "High",
-    status: "Feedback received",
-    date: "09 Aug 2026",
-    dermatologist: "Dr. Sarah Williams",
-  },
-  {
-    id: "CASE-1021",
-    patient: "Chidinma Eze",
-    patientId: "PT-0245",
-    concern: "Lower-leg swelling",
-    severity: "Low",
-    status: "Managed locally",
-    date: "08 Aug 2026",
-    dermatologist: "Not required",
-  },
-];
-
-function getSeverityStyle(severity: string) {
-  if (severity === "High") {
+// Dynamic styling for urgency tiers
+function getSeverityStyle(severity: string | null | undefined) {
+  const s = (severity || "").toLowerCase();
+  
+  if (s.includes("high") || s.includes("urgent")) {
     return "bg-red-50 text-red-700";
   }
-
-  if (severity === "Moderate") {
+  if (s.includes("moderate") || s.includes("medium")) {
     return "bg-amber-50 text-amber-700";
   }
-
-  return "bg-emerald-50 text-emerald-700";
-}
-
-function getStatusStyle(status: string) {
-  if (status === "Awaiting dermatologist") {
-    return "bg-sky-50 text-sky-700";
-  }
-
-  if (status === "Feedback received") {
+  if (s.includes("low") || s.includes("routine")) {
     return "bg-emerald-50 text-emerald-700";
   }
+  
+  return "bg-slate-100 text-slate-700";
+}
 
-  if (status === "AI review complete") {
+// Dynamic styling for case statuses
+function getStatusStyle(status: string | null | undefined) {
+  const s = (status || "").toLowerCase();
+  
+  if (s.includes("submitted") || s.includes("awaiting")) {
+    return "bg-sky-50 text-sky-700";
+  }
+  if (s.includes("feedback") || s.includes("resolved") || s.includes("closed")) {
+    return "bg-emerald-50 text-emerald-700";
+  }
+  if (s.includes("ai review") || s.includes("analyzed")) {
     return "bg-violet-50 text-violet-700";
   }
-
+  
   return "bg-slate-100 text-slate-600";
+}
+
+// Helper to format date nicely (e.g., "10 Aug 2026")
+function formatDate(dateString: string) {
+  if (!dateString) return "Unknown Date";
+  return new Date(dateString).toLocaleDateString('en-GB', { 
+    day: '2-digit', 
+    month: 'short', 
+    year: 'numeric' 
+  });
 }
 
 export default function ReferralsPage() {
   const router = useRouter();
 
-  // Stores the text entered into the search field.
+  const [cases, setCases] = useState<Case[]>([]);
+    const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedFilter, setSelectedFilter] = useState<ReferralFilter>("All cases");
 
-  // Stores the selected status filter.
-  const [selectedFilter, setSelectedFilter] =
-    useState<ReferralFilter>("All cases");
+  // Fetch all cases on mount
+  useEffect(() => {
+    async function fetchCases() {
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        
+         const [casesRes, feedbacksRes] = await Promise.all([
+          fetch(`${baseUrl}/cases`),
+          fetch(`${baseUrl}/feedback?limit=10`),
+        ]);
 
-  // Filters the temporary referral list based on search and status.
-  const filteredReferrals = useMemo(() => {
-    return referrals.filter((referral) => {
+        if ( !casesRes.ok || !feedbacksRes.ok) {
+          throw new Error("Failed to fetch one or more dashboard metrics");
+        }
+
+        const [casesData, feedbacksData] = await Promise.all([
+          casesRes.json(),
+          feedbacksRes.json(),
+        ]);
+
+         const sortedData = casesData.sort((a: Case, b: Case) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        
+        setCases(sortedData);
+        setFeedbacks(feedbacksData);
+        
+       
+      } catch (err) {
+        console.error("Error fetching cases:", err);
+        setError("Unable to load the referral queue.");
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchCases();
+  }, []);
+
+  // --- DYNAMIC SUMMARY STATS ---
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+
+  const casesThisMonth = cases.filter(c => {
+    const d = new Date(c.created_at);
+    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+  }).length;
+
+  const urgentCasesCount = cases.filter(c => (c.urgency_tier || "").toLowerCase().includes("high")).length;
+  // Assuming "submitted" or similar means it's waiting for a doctor
+  const awaitingReviewCount = cases.filter(c => (c.status || "").toLowerCase().includes("submitted")).length;
+  // Assuming "resolved" or "feedback" means the doctor replied
+  const feedbackReceivedCount = feedbacks.length;
+
+
+  // --- FILTER & SEARCH LOGIC ---
+  const filteredCases = useMemo(() => {
+    return cases.filter((c) => {
       const searchValue = searchTerm.toLowerCase();
+      
+      const patientName = (c.patient_name || "").toLowerCase();
+      const patientRef = (c.patient_ref || `PT-${c.patient_id}`).toLowerCase();
+      const caseIdStr = `case-${c.id}`.toLowerCase();
+      const concern = (c.complaint || "").toLowerCase();
 
       const matchesSearch =
-        referral.patient.toLowerCase().includes(searchValue) ||
-        referral.patientId.toLowerCase().includes(searchValue) ||
-        referral.id.toLowerCase().includes(searchValue) ||
-        referral.concern.toLowerCase().includes(searchValue);
+        patientName.includes(searchValue) ||
+        patientRef.includes(searchValue) ||
+        caseIdStr.includes(searchValue) ||
+        concern.includes(searchValue);
+
+      const tier = (c.urgency_tier || "").toLowerCase();
+      const stat = (c.status || "").toLowerCase();
 
       const matchesFilter =
         selectedFilter === "All cases" ||
-        (selectedFilter === "Urgent" && referral.severity === "High") ||
-        (selectedFilter === "Awaiting review" &&
-          referral.status === "Awaiting dermatologist") ||
-        (selectedFilter === "Feedback received" &&
-          referral.status === "Feedback received");
+        (selectedFilter === "Urgent" && tier.includes("high")) ||
+        (selectedFilter === "Awaiting review" && stat.includes("submitted")) || 
+        (selectedFilter === "Feedback received" && (stat.includes("resolved") || stat.includes("feedback") || stat.includes("closed")));
 
       return matchesSearch && matchesFilter;
     });
-  }, [searchTerm, selectedFilter]);
+  }, [searchTerm, selectedFilter, cases]);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-8">
+    <div className="mx-auto max-w-7xl space-y-8 font-poppins">
       {/* Page heading */}
       <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
@@ -141,29 +196,44 @@ export default function ReferralsPage() {
         </button>
       </section>
 
+      {/* Error state */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
       {/* Queue summary cards */}
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-500">Total cases</p>
-          <p className="mt-3 text-3xl font-semibold text-slate-950">24</p>
+          <p className="mt-3 text-3xl font-semibold text-slate-950">
+            {isLoading ? "..." : casesThisMonth.toString().padStart(2, '0')}
+          </p>
           <p className="mt-2 text-xs text-slate-400">This month</p>
         </div>
 
         <div className="rounded-2xl border border-red-100 bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-500">Urgent cases</p>
-          <p className="mt-3 text-3xl font-semibold text-red-700">03</p>
+          <p className="mt-3 text-3xl font-semibold text-red-700">
+            {isLoading ? "..." : urgentCasesCount.toString().padStart(2, '0')}
+          </p>
           <p className="mt-2 text-xs text-red-600">Priority attention</p>
         </div>
 
         <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-500">Awaiting review</p>
-          <p className="mt-3 text-3xl font-semibold text-amber-700">08</p>
+          <p className="mt-3 text-3xl font-semibold text-amber-700">
+            {isLoading ? "..." : awaitingReviewCount.toString().padStart(2, '0')}
+          </p>
           <p className="mt-2 text-xs text-amber-600">With dermatologist</p>
         </div>
 
         <div className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
           <p className="text-sm text-slate-500">Feedback received</p>
-          <p className="mt-3 text-3xl font-semibold text-emerald-700">17</p>
+          <p className="mt-3 text-3xl font-semibold text-emerald-700">
+            {isLoading ? "..." : feedbackReceivedCount.toString().padStart(2, '0')}
+          </p>
           <p className="mt-2 text-xs text-emerald-600">Ready for follow-up</p>
         </div>
       </section>
@@ -219,7 +289,7 @@ export default function ReferralsPage() {
           <h3 className="font-semibold text-slate-950">Cases</h3>
 
           <p className="mt-1 text-sm text-slate-500">
-            Showing {filteredReferrals.length} of {referrals.length} cases.
+            {isLoading ? "Loading cases..." : `Showing ${filteredCases.length} of ${cases.length} cases.`}
           </p>
         </div>
 
@@ -237,68 +307,73 @@ export default function ReferralsPage() {
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-              {filteredReferrals.map((referral) => (
-                <tr key={referral.id} className="transition hover:bg-sky-50/50">
-                  <td className="px-5 py-5">
-                    <p className="font-medium text-slate-950">
-                      {referral.patient}
-                    </p>
-
-                    <p className="mt-1 text-xs text-slate-400">
-                      {referral.patientId} · {referral.id}
-                    </p>
-                  </td>
-
-                  <td className="px-5 py-5 text-sm text-slate-600">
-                    {referral.concern}
-                  </td>
-
-                  <td className="px-5 py-5">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-medium ${getSeverityStyle(
-                        referral.severity
-                      )}`}
-                    >
-                      {referral.severity}
-                    </span>
-                  </td>
-
-                  <td className="px-5 py-5">
-                    <span
-                      className={`rounded-full px-3 py-1 text-xs font-medium ${getStatusStyle(
-                        referral.status
-                      )}`}
-                    >
-                      {referral.status}
-                    </span>
-                  </td>
-
-                  <td className="px-5 py-5 text-sm text-slate-500">
-                    {referral.date}
-                  </td>
-
-                  <td className="px-5 py-5">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        router.push(`/clinics/cases/${referral.id}`)
-                      }
-                      className="text-sm font-semibold text-sky-600 hover:text-sky-700"
-                    >
-                      View case
-                    </button>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-5 py-12 text-center text-sm text-slate-500 animate-pulse">
+                    Loading queue...
                   </td>
                 </tr>
-              ))}
+              ) : filteredCases.length > 0 ? (
+                filteredCases.map((c) => (
+                  <tr key={c.id} className="transition hover:bg-sky-50/50">
+                    <td className="px-5 py-5">
+                      <p className="font-medium text-slate-950 capitalize">
+                        {c.patient_name || "Unknown Patient"}
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-400 uppercase">
+                        {c.patient_ref || `PT-${c.patient_id}`} · CASE-{c.id}
+                      </p>
+                    </td>
+
+                    <td className="px-5 py-5 text-sm text-slate-600">
+                      {c.complaint || "No complaint recorded"}
+                    </td>
+
+                    <td className="px-5 py-5">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-medium capitalize whitespace-nowrap ${getSeverityStyle(
+                          c.urgency_tier
+                        )}`}
+                      >
+                        {c.urgency_tier || "Pending AI"}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-5">
+                      <span
+                        className={`rounded-full px-3 py-1 text-xs font-medium capitalize whitespace-nowrap ${getStatusStyle(
+                          c.status
+                        )}`}
+                      >
+                        {c.status || "Submitted"}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-5 text-sm text-slate-500 whitespace-nowrap">
+                      {formatDate(c.created_at)}
+                    </td>
+
+                    <td className="px-5 py-5">
+                      <button
+                        type="button"
+                        onClick={() => router.push(`/clinics/cases/${c.id}`)}
+                        className="text-sm font-semibold text-sky-600 hover:text-sky-700 whitespace-nowrap"
+                      >
+                        View case
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : null}
             </tbody>
           </table>
         </div>
 
         {/* Empty state for unsuccessful searches */}
-        {filteredReferrals.length === 0 && (
-          <div className="px-5 py-12 text-center">
+        {!isLoading && filteredCases.length === 0 && (
+          <div className="px-5 py-12 text-center border-t border-slate-100">
             <p className="font-medium text-slate-700">No cases found</p>
-
             <p className="mt-1 text-sm text-slate-500">
               Try another search term or change the selected filter.
             </p>

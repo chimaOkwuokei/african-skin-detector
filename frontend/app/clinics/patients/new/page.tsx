@@ -1,16 +1,67 @@
 "use client";
 
-import { FormEvent } from "react";
+import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function NewPatientPage() {
   const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsLoading(true);
 
-    router.push("/clinics/patients/new/clinical");
-  }
+    // 1. Save a reference to the form element IMMEDIATELY (before any await)
+    const formElement = e.currentTarget;
+    
+    const formData = new FormData(formElement);
+
+    const payload = {
+      name: (formData.get("name") as string) || "",
+      date_of_birth: (formData.get("date_of_birth") as string) || "",
+      sex: (formData.get("sex") as string) || "",
+      phone: (formData.get("phone") as string) || "",
+      location: (formData.get("location") as string) || "",
+      teledermatology_consent: formData.get("teledermatology_consent") === "on",
+      research_consent: formData.get("research_consent") === "on",
+      external_ref: (formData.get("external_ref") as string) || "",
+      history_notes: (formData.get("history_notes") as string) || "",
+    };
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+      const response = await fetch(`${baseUrl}/patients`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Patient created:", data);
+      localStorage.setItem("current_patient_id", data.id);
+      
+      // 2. Use the saved reference to reset the form
+      formElement.reset();
+      
+      // Navigate to the next step
+      router.push("/clinics/patients/new/clinical");
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      console.error("Failed to create patient:", errorMessage);
+      alert(`Failed to create patient: ${errorMessage}`);
+    } finally {
+      setIsLoading(false);
+    }
+  }; 
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -73,25 +124,6 @@ export default function NewPatientPage() {
           </div>
 
           <div className="grid gap-5 md:grid-cols-2">
-            {/* Medical record number */}
-            <div>
-              <label
-                htmlFor="patientId"
-                className="mb-2 block text-sm font-medium text-slate-700"
-              >
-                Patient or medical record number
-              </label>
-
-              <input
-                id="patientId"
-                name="patientId"
-                type="text"
-                placeholder="e.g. PT-0249"
-                required
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
-              />
-            </div>
-
             {/* Full name */}
             <div>
               <label
@@ -103,7 +135,7 @@ export default function NewPatientPage() {
 
               <input
                 id="fullName"
-                name="fullName"
+                name="name"
                 type="text"
                 placeholder="Enter patient's full name"
                 required
@@ -122,7 +154,7 @@ export default function NewPatientPage() {
 
               <input
                 id="dateOfBirth"
-                name="dateOfBirth"
+                name="date_of_birth"
                 type="date"
                 required
                 className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
@@ -211,7 +243,7 @@ export default function NewPatientPage() {
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
-                name="teledermatologyConsent"
+                name="teledermatology_consent"
                 required
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-500"
               />
@@ -226,7 +258,7 @@ export default function NewPatientPage() {
             <label className="flex items-start gap-3">
               <input
                 type="checkbox"
-                name="researchConsent"
+                name="research_consent"
                 className="mt-1 h-4 w-4 rounded border-slate-300 text-sky-500 focus:ring-sky-500"
               />
 
@@ -250,9 +282,10 @@ export default function NewPatientPage() {
 
           <button
             type="submit"
-            className="rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600"
+            disabled={isLoading}
+            className="rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600 disabled:opacity-50"
           >
-            Continue to clinical details
+            {isLoading ? "Saving..." : "Continue to clinical details"}
           </button>
         </div>
       </form>
