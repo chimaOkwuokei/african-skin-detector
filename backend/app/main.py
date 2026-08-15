@@ -2,8 +2,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 import app.models
+from app.core.config import settings
 from app.core.database import init_db
 from app.routers import analysis, clinic, feedback, patient, specialist
 
@@ -40,3 +42,9 @@ app.include_router(analysis.router)
 app.include_router(feedback.router)
 app.include_router(feedback.feed_router)
 app.include_router(specialist.router)
+
+app.mount(
+    "/uploads",
+    StaticFiles(directory=settings.upload_dir),
+    name="uploads",
+)

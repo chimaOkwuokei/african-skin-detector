@@ -2,8 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from app.core.database import get_session
-from app.models import User
+from app.models import Assignment, User
+from app.schemas.clinic import AssignmentRead
 from app.schemas.specialist import UserCreate, UserRead
+
+
 
 router = APIRouter(prefix="/specialists", tags=["specialists"])
 
@@ -32,9 +35,42 @@ def list_specialists(
     return session.exec(query).all()
 
 
+@router.get(
+    "/{user_id}/assignments",
+    response_model=list[AssignmentRead],
+)
+def list_specialist_assignments(
+    user_id: int,
+    session: Session = Depends(get_session),
+):
+    """Return all assignments belonging to one specialist."""
+
+    specialist = session.get(User, user_id)
+
+    if specialist is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Specialist not found",
+        )
+
+    if specialist.role != "specialist":
+        raise HTTPException(
+            status_code=400,
+            detail="User is not a specialist",
+        )
+
+    assignments = session.exec(
+        select(Assignment).where(
+            Assignment.specialist_id == user_id
+        )
+        ).all()
+
+    return assignments
+
 @router.get("/{user_id}", response_model=UserRead)
 def get_specialist(user_id: int, session: Session = Depends(get_session)):
     user = session.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
