@@ -3,29 +3,82 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-// The two states used by this frontend prototype.
-type TriageStatus = "analyzing" | "complete";
+// Define the shape of the data returned from the API
+interface AnalysisResult {
+  id: number;
+  diagnosis_text: string;
+  urgency_tier: string;
+  urgency_score: number;
+  red_flags: string;
+  model_version: string;
+}
+
+type TriageStatus = "analyzing" | "complete" | "error";
 
 export default function TriagePage() {
   const router = useRouter();
 
-  // The page starts by showing the AI analysis state.
   const [status, setStatus] = useState<TriageStatus>("analyzing");
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  // Simulates a response from the future AI backend.
   useEffect(() => {
-    const analysisTimer = window.setTimeout(() => {
-      setStatus("complete");
-    }, 1800);
+    async function fetchAnalysis() {
+      const caseId = localStorage.getItem("current_case_id");
 
-    // Clear the timer if the clinician leaves the page early.
-    return () => window.clearTimeout(analysisTimer);
+      if (!caseId) {
+        setErrorMessage("Missing case record. Please restart the process.");
+        setStatus("error");
+        return;
+      }
+
+      try {
+        const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        
+        const response = await fetch(`${baseUrl}/cases/${caseId}/analyses`, {
+          headers: {
+            "Accept": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch analysis (${response.status})`);
+        }
+
+        const data: AnalysisResult[] = await response.json();
+
+        if (!data || data.length === 0) {
+          throw new Error("No analysis results found for this case.");
+        }
+
+        // Assuming the latest analysis is what we want (using the first item)
+        setAnalysis(data[0]);
+        setStatus("complete");
+      } catch (error) {
+        console.error("Failed to load triage data:", error);
+        setErrorMessage(error instanceof Error ? error.message : "An error occurred");
+        setStatus("error");
+      }
+    }
+
+    fetchAnalysis();
   }, []);
 
-  // Loading state shown while the mock AI is processing the case.
+  // Helper to determine color scheme based on the urgency tier
+  const getTierColors = (tier: string = "") => {
+    const t = tier.toLowerCase();
+    if (t.includes("high") || t.includes("urgent")) {
+      return { border: "border-red-200", bgText: "bg-red-50 text-red-700", text: "text-red-700", subText: "text-red-600" };
+    }
+    if (t.includes("medium") || t.includes("moderate")) {
+      return { border: "border-amber-200", bgText: "bg-amber-50 text-amber-700", text: "text-amber-700", subText: "text-amber-600" };
+    }
+    return { border: "border-sky-200", bgText: "bg-sky-50 text-sky-700", text: "text-sky-700", subText: "text-sky-600" };
+  };
+
   if (status === "analyzing") {
     return (
-      <div className="mx-auto flex min-h-[60vh] max-w-3xl items-center justify-center">
+      <div className="mx-auto flex min-h-[60vh] max-w-3xl items-center justify-center font-poppins">
         <div className="w-full rounded-2xl border border-sky-100 bg-white p-8 text-center shadow-sm">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-sky-100">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-sky-200 border-t-sky-500" />
@@ -53,7 +106,7 @@ export default function TriagePage() {
 
             <p className="flex items-center gap-3 text-sky-600">
               <span className="h-2 w-2 animate-pulse rounded-full bg-sky-500" />
-              Preparing preliminary assessment
+              Retrieving preliminary assessment...
             </p>
           </div>
         </div>
@@ -61,8 +114,28 @@ export default function TriagePage() {
     );
   }
 
+  if (status === "error") {
+    return (
+      <div className="mx-auto flex min-h-[60vh] max-w-3xl items-center justify-center font-poppins">
+        <div className="w-full rounded-2xl border border-red-200 bg-red-50 p-8 text-center shadow-sm">
+          <h2 className="text-xl font-semibold text-red-700">Analysis Error</h2>
+          <p className="mt-2 text-sm text-red-600">{errorMessage}</p>
+          <button
+            onClick={() => router.back()}
+            className="mt-6 rounded-xl bg-white px-5 py-2 text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-100 transition"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Derive dynamic styling
+  const colors = getTierColors(analysis?.urgency_tier);
+
   return (
-    <div className="mx-auto max-w-5xl space-y-8">
+    <div className="mx-auto max-w-5xl space-y-8 font-poppins">
       {/* Page introduction */}
       <section>
         <p className="text-sm font-medium text-sky-600">
@@ -80,26 +153,26 @@ export default function TriagePage() {
       </section>
 
       {/* Main triage result */}
-      <section className="rounded-2xl border border-red-200 bg-white shadow-sm">
+      <section className={`rounded-2xl border ${colors.border} bg-white shadow-sm`}>
         <div className="flex flex-col gap-5 border-b border-slate-100 p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium text-slate-500">
               Recommended priority
             </p>
 
-            <h3 className="mt-1 text-2xl font-semibold text-red-700">
-              High priority
+            <h3 className={`mt-1 text-2xl font-semibold capitalize ${colors.text}`}>
+              {analysis?.urgency_tier || "Unknown"}
             </h3>
           </div>
 
-          <div className="rounded-2xl bg-red-50 px-6 py-4 text-center">
-            <p className="text-xs font-medium uppercase tracking-wide text-red-600">
+          <div className={`rounded-2xl px-6 py-4 text-center ${colors.bgText}`}>
+            <p className={`text-xs font-medium uppercase tracking-wide ${colors.subText}`}>
               Severity score
             </p>
 
-            <p className="mt-1 text-4xl font-bold text-red-700">78</p>
+            <p className="mt-1 text-4xl font-bold">{analysis?.urgency_score || 0}</p>
 
-            <p className="text-xs text-red-600">out of 100</p>
+            <p className={`text-xs ${colors.subText}`}>out of 100</p>
           </div>
         </div>
 
@@ -113,21 +186,10 @@ export default function TriagePage() {
             <ul className="mt-4 space-y-3">
               <li className="rounded-xl bg-sky-50 p-4">
                 <p className="text-sm font-medium text-slate-950">
-                  Inflammatory skin condition
+                  {analysis?.diagnosis_text || "No diagnosis provided."}
                 </p>
-
                 <p className="mt-1 text-xs text-slate-500">
-                  Preliminary possibility · Moderate confidence
-                </p>
-              </li>
-
-              <li className="rounded-xl bg-sky-50 p-4">
-                <p className="text-sm font-medium text-slate-950">
-                  Possible secondary infection
-                </p>
-
-                <p className="mt-1 text-xs text-slate-500">
-                  Preliminary possibility · Low confidence
+                  AI Model: {analysis?.model_version || "Unknown"}
                 </p>
               </li>
             </ul>
@@ -139,12 +201,14 @@ export default function TriagePage() {
               Suggested next action
             </h4>
 
-            <div className="mt-4 rounded-xl border border-red-100 bg-red-50 p-4">
-              <p className="font-medium text-red-800">
-                Refer to a dermatologist
+            <div className={`mt-4 rounded-xl border p-4 ${colors.border} ${colors.bgText}`}>
+              <p className="font-medium">
+                {analysis?.urgency_tier?.toLowerCase().includes("high") 
+                  ? "Refer to a dermatologist immediately" 
+                  : "Routine dermatological review"}
               </p>
 
-              <p className="mt-2 text-sm leading-6 text-red-700">
+              <p className={`mt-2 text-sm leading-6 ${colors.subText}`}>
                 Specialist review is recommended based on the reported
                 symptoms, images, and preliminary severity score.
               </p>
@@ -160,23 +224,32 @@ export default function TriagePage() {
         </h3>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
-            <p className="text-sm font-medium text-amber-800">
-              Symptoms may require closer monitoring
-            </p>
-
-            <p className="mt-1 text-xs leading-5 text-amber-700">
-              Confirm duration, progression, and any changes since onset.
-            </p>
-          </div>
+          {analysis?.red_flags ? (
+            <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
+              <p className="text-sm font-medium text-amber-800">
+                Red Flags Detected
+              </p>
+              <p className="mt-1 text-xs leading-5 text-amber-700">
+                {analysis.red_flags}
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-4">
+              <p className="text-sm font-medium text-emerald-800">
+                No acute red flags detected
+              </p>
+              <p className="mt-1 text-xs leading-5 text-emerald-700">
+                The model did not identify immediate signs of systemic emergency.
+              </p>
+            </div>
+          )}
 
           <div className="rounded-xl border border-sky-100 bg-sky-50 p-4">
             <p className="text-sm font-medium text-sky-800">
-              Image quality appears usable
+              Image review note
             </p>
-
             <p className="mt-1 text-xs leading-5 text-sky-700">
-              A dermatologist may still request an additional close-up image.
+              A dermatologist may still request additional or closer images during the tele-consultation.
             </p>
           </div>
         </div>
@@ -210,7 +283,7 @@ export default function TriagePage() {
           onClick={() => router.push("/clinics/referrals")}
           className="rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600"
         >
-          Send to dermatologist
+          View Referrals
         </button>
       </section>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent } from "react";
+import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 const symptoms = [
@@ -16,15 +16,80 @@ const symptoms = [
 
 export default function ClinicalDetailsPage() {
   const router = useRouter();
+  const [isLoading, setIsLoading] = useState(false);
 
-  // This is frontend-only navigation for now.
-  // Later, the form data will be saved before moving to the image step.
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    // Continue to the lesion image upload step.
-    router.push("/clinics/patients/new/images");
-  }
+    // Retrieve the patient ID we just created in the previous step
+    const patientId = localStorage.getItem("current_patient_id");
+    
+    if (!patientId) {
+      alert("Missing patient record. Please go back and create the patient first.");
+      return;
+    }
+
+    setIsLoading(true);
+    const formElement = event.currentTarget;
+    const formData = new FormData(formElement);
+
+    // Extract all checked symptoms into a single comma-separated string
+    const selectedSymptoms = formData.getAll("symptoms").join(", ");
+
+    // Structure the payload exactly as the /cases endpoint expects
+    const payload = {
+      patient_id: Number(patientId),
+      // submitted_by: 1, 
+      complaint: (formData.get("mainComplaint") as string) || "",
+      duration_value: Number(formData.get("duration")) || 0,
+      duration_unit: (formData.get("durationUnit") as string) || "",
+      onset: (formData.get("onset") as string) || "",
+      symptoms: selectedSymptoms,
+      body_area: (formData.get("bodyArea") as string) || "",
+      affected_area_extent: (formData.get("affectedAreas") as string) || "",
+      medical_history: (formData.get("medicalHistory") as string) || "",
+      medication: (formData.get("medication") as string) || "",
+      allergies: (formData.get("allergies") as string) || "",
+      clinician_notes: (formData.get("clinicianNotes") as string) || "",
+    };
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+      const response = await fetch(`${baseUrl}/cases`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("Case created:", data);
+      
+      // Optionally store the case ID if the next step (Images) needs it!
+      if (data.id) {
+        localStorage.setItem("current_case_id", data.id);
+      }
+
+      // Clear the form
+      formElement.reset();
+
+      // Continue to the lesion image upload step.
+      router.push("/clinics/patients/new/images");
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+      console.error("Failed to create case:", errorMessage);
+      alert(`Failed to save clinical details: ${errorMessage}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-5xl space-y-8">
@@ -366,9 +431,10 @@ export default function ClinicalDetailsPage() {
 
           <button
             type="submit"
-            className="rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600"
+            disabled={isLoading}
+            className="rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600 disabled:opacity-50"
           >
-            Continue to images
+            {isLoading ? "Saving..." : "Continue to images"}
           </button>
         </div>
       </form>

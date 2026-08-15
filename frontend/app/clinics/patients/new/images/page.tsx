@@ -1,5 +1,3 @@
-
-
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
@@ -16,26 +14,19 @@ type SelectedImage = {
 export default function LesionImagesPage() {
   const router = useRouter();
 
-  // Stores images selected from the clinician's computer or device.
   const [images, setImages] = useState<SelectedImage[]>([]);
-
-  // Displays validation messages to the clinician.
   const [errorMessage, setErrorMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false); // Track upload state
 
-  // Handles images selected through the file input.
   function handleImageSelection(event: ChangeEvent<HTMLInputElement>) {
     const selectedFiles = Array.from(event.target.files ?? []);
-
-    // Clear any previous error message.
     setErrorMessage("");
 
-    // Do not allow more than five images for one case in this prototype.
     if (images.length + selectedFiles.length > 5) {
       setErrorMessage("You can upload a maximum of five images per case.");
       return;
     }
 
-    // Check that every selected file is an accepted image type.
     const invalidFile = selectedFiles.find(
       (file) => !["image/jpeg", "image/png", "image/webp"].includes(file.type)
     );
@@ -45,7 +36,6 @@ export default function LesionImagesPage() {
       return;
     }
 
-    // Prevent very large files from being selected.
     const oversizedFile = selectedFiles.find(
       (file) => file.size > 10 * 1024 * 1024
     );
@@ -55,7 +45,6 @@ export default function LesionImagesPage() {
       return;
     }
 
-    // Convert each selected file into a temporary preview item.
     const newImages = selectedFiles.map((file) => ({
       id: `${file.name}-${file.lastModified}-${Math.random()}`,
       file,
@@ -63,17 +52,13 @@ export default function LesionImagesPage() {
     }));
 
     setImages((currentImages) => [...currentImages, ...newImages]);
-
-    // Reset the input so the same file can be selected again if needed.
     event.target.value = "";
   }
 
-  // Removes an image from the current case.
   function removeImage(imageId: string) {
     setImages((currentImages) => {
       const imageToRemove = currentImages.find((image) => image.id === imageId);
 
-      // Release the temporary browser URL when the image is removed.
       if (imageToRemove) {
         URL.revokeObjectURL(imageToRemove.previewUrl);
       }
@@ -82,18 +67,84 @@ export default function LesionImagesPage() {
     });
   }
 
-  // Submits the selected images to the next frontend step.
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    // A case must contain at least one image.
     if (images.length === 0) {
-      setErrorMessage("Upload at least one lesion image before continuing.");
+      setErrorMessage("Upload a lesion image before continuing.");
       return;
     }
 
-    // The AI triage page will be created in the next step.
-    router.push("/clinics/patients/new/triage");
+    // Retrieve the Case ID generated in Step 2
+    const caseId = localStorage.getItem("current_case_id");
+
+    if (!caseId) {
+      setErrorMessage("Missing case record. Please go back and submit the clinical details first.");
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage("");
+
+    try {
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+      // ==========================================
+      // 1. UPLOAD THE IMAGE
+      // ==========================================
+      const formData = new FormData();
+      formData.append("file", images[0].file);
+
+      const imageResponse = await fetch(`${baseUrl}/cases/${caseId}/images`, {
+        method: "POST",
+        body: formData, // No Content-Type header needed for FormData
+      });
+
+      if (!imageResponse.ok) {
+        const errorData = await imageResponse.json().catch(() => ({}));
+        // FastAPI often uses 'detail' for error messages
+        const errMsg = errorData.detail || errorData.message || `Failed to upload image`;
+        throw new Error(`Image Upload Error: ${errMsg}`);
+      }
+
+      console.log("Uploaded image successfully.");
+
+      // ==========================================
+      // 2. TRIGGER THE AI ANALYSIS
+      // ==========================================
+      const analysisResponse = await fetch(`${baseUrl}/cases/${caseId}/analyses`, {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+        },
+        // No body required according to the Swagger docs
+      });
+
+      if (!analysisResponse.ok) {
+        const errorData = await analysisResponse.json().catch(() => ({}));
+        const errMsg = errorData.detail || errorData.message || `Analysis failed`;
+        throw new Error(`AI Analysis Error: ${errMsg}`);
+      }
+
+      const analysisResult = await analysisResponse.json();
+      console.log("Analysis completed:", analysisResult);
+
+      // Optional: Save the analysis result so the Triage page can display it immediately
+      localStorage.setItem("current_analysis_data", JSON.stringify(analysisResult));
+
+      // Clean up object URL
+      URL.revokeObjectURL(images[0].previewUrl);
+
+      // Proceed to the AI triage page
+      router.push("/clinics/patients/new/triage");
+
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unknown error occurred";
+      console.error("Pipeline failed:", msg);
+      setErrorMessage(msg);
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (
@@ -117,21 +168,14 @@ export default function LesionImagesPage() {
       {/* Workflow progress indicator */}
       <section className="rounded-2xl border border-sky-100 bg-white p-5 shadow-sm">
         <div className="flex items-center gap-3">
-          {/* Completed patient information step */}
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-sm font-semibold text-white">
             ✓
           </div>
-
           <div className="h-px flex-1 bg-sky-300" />
-
-          {/* Completed clinical details step */}
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-500 text-sm font-semibold text-white">
             ✓
           </div>
-
           <div className="h-px flex-1 bg-sky-300" />
-
-          {/* Current image step */}
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-sky-500 text-sm font-semibold text-white">
             3
           </div>
@@ -185,6 +229,7 @@ export default function LesionImagesPage() {
               type="file"
               accept="image/jpeg,image/png,image/webp"
               multiple
+              disabled={isLoading}
               onChange={handleImageSelection}
               className="sr-only"
             />
@@ -210,7 +255,6 @@ export default function LesionImagesPage() {
               <h3 className="text-lg font-semibold text-slate-950">
                 Selected images
               </h3>
-
               <p className="mt-1 text-sm text-slate-500">
                 {images.length} of 5 images selected
               </p>
@@ -218,12 +262,10 @@ export default function LesionImagesPage() {
           </div>
 
           {images.length === 0 ? (
-            // Empty state shown before an image is selected.
             <div className="rounded-xl border border-slate-200 bg-slate-50 px-5 py-10 text-center">
               <p className="text-sm text-slate-500">No images selected yet.</p>
             </div>
           ) : (
-            // Preview grid shown after images are selected.
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {images.map((image, index) => (
                 <div
@@ -236,23 +278,20 @@ export default function LesionImagesPage() {
                       alt={`Lesion image ${index + 1}`}
                       className="h-full w-full object-cover"
                     />
-
-                    {/* Remove image button */}
                     <button
                       type="button"
+                      disabled={isLoading}
                       onClick={() => removeImage(image.id)}
-                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-slate-950/80 text-sm text-white transition hover:bg-red-600"
+                      className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-slate-950/80 text-sm text-white transition hover:bg-red-600 disabled:opacity-50"
                       aria-label={`Remove image ${index + 1}`}
                     >
                       ×
                     </button>
                   </div>
-
                   <div className="p-3">
                     <p className="truncate text-xs font-medium text-slate-700">
                       {image.file.name}
                     </p>
-
                     <p className="mt-1 text-xs text-slate-400">
                       {(image.file.size / 1024 / 1024).toFixed(2)} MB
                     </p>
@@ -277,17 +316,19 @@ export default function LesionImagesPage() {
         <div className="flex flex-col-reverse justify-end gap-3 sm:flex-row">
           <button
             type="button"
+            disabled={isLoading}
             onClick={() => router.back()}
-            className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+            className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-center text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
           >
             Back
           </button>
 
           <button
             type="submit"
-            className="rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600"
+            disabled={isLoading}
+            className="rounded-xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-sky-600 disabled:opacity-50"
           >
-            Continue to AI triage
+            {isLoading ? "Uploading..." : "Continue to AI triage"}
           </button>
         </div>
       </form>
